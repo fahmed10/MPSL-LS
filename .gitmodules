@@ -1,0 +1,3 @@
+[submodule "MPSLInterpreter"]
+	path = MPSLInterpreter
+	url = https://github.com/fahmed10/MPSLInterpreter
