@@ -32,8 +32,11 @@ public class Program
 
         while (true)
         {
-            JsonRpcMessage message = reader.ReadMessage();
-            queue.Enqueue(message);
+            JsonRpcMessage? message = reader.ReadMessage();
+            if (message != null)
+            {
+                queue.Enqueue(message);
+            }
         }
     }
 
