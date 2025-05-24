@@ -61,7 +61,7 @@ public class LspServer(Stream outputStream)
     void HandleDocumentOpen(JsonRpcMessage message)
     {
         JsonNode documentNode = message.Content["params"]!["textDocument"]!;
-        documents.Add(documentNode.GetPath<string>("uri"), documentNode.GetPath<string>("text"));
+        documents.Add(documentNode.GetPath<string>("uri"), documentNode.GetPath<string>("text").ReplaceLineEndings("\n"));
     }
 
     void HandleDocumentClose(JsonRpcMessage message)
@@ -73,7 +73,7 @@ public class LspServer(Stream outputStream)
     void HandleDocumentChange(JsonRpcMessage message)
     {
         JsonNode documentNode = message.Content["params"]!["textDocument"]!;
-        documents[documentNode.GetPath<string>("uri")] = message.Content["params"]!["contentChanges"]![0]!["text"]!.GetValue<string>();
+        documents[documentNode.GetPath<string>("uri")] = message.Content["params"]!["contentChanges"]![0]!["text"]!.GetValue<string>().ReplaceLineEndings("\n");
     }
 
     void HandleCompletion(JsonRpcMessage message)
