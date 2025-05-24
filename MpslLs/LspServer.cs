@@ -13,6 +13,7 @@ public class LspServer(Stream outputStream)
     static readonly CompletionItem[] builtInCompletions = BuiltInFunctions.functions.Select(pair => new CompletionItem("@" + pair.Key, CompletionItemKind.Function)).ToArray();
     readonly StreamWriter writer = new(outputStream);
     readonly Dictionary<string, string> documents = [];
+    readonly CodeVisitor codeVisitor = new();
 
     public void ProcessMessage(JsonRpcMessage message)
     {
@@ -88,17 +89,17 @@ public class LspServer(Stream outputStream)
         Token? currentInclusive = result.Tokens.FirstOrDefault(t => index >= t.Start && index <= t.End);
         Token? last = result.Tokens.LastOrDefault(t => index > t.End);
 
-        // TODO: Don't return completions when cursor is on function declaration parameter names
-        if (last?.Type is TokenType.VAR or TokenType.EACH or TokenType.FN || current?.Type is TokenType.STRING or TokenType.INTERPOLATED_STRING_MARKER || currentInclusive?.Type is TokenType.INTERPOLATED_TEXT || (currentInclusive?.Type is TokenType.INTERPOLATED_STRING_MARKER && index > currentInclusive.Start && currentInclusive.Lexeme is "@\"") || current?.Type == TokenType.COMMENT)
+        CompletionListener completionListener = new(index);
+        codeVisitor.Visit(result.Statements, completionListener);
+
+        if (completionListener.InFunctionParameterList || last?.Type is TokenType.VAR or TokenType.EACH or TokenType.FN || current?.Type is TokenType.STRING or TokenType.INTERPOLATED_STRING_MARKER || currentInclusive?.Type is TokenType.INTERPOLATED_TEXT || (currentInclusive?.Type is TokenType.INTERPOLATED_STRING_MARKER && index > currentInclusive.Start && currentInclusive.Lexeme is "@\"") || current?.Type == TokenType.COMMENT)
         {
             SendResponseTo(message, Array.Empty<object>());
             return;
         }
 
-        IList<CompletionItem> completions = new CompletionVisitor().Check(result.Statements, index);
-
         SendResponseTo(message, (object[])[
-            ..completions,
+            ..completionListener.Items,
             ..builtInCompletions,
             ..keywords.Select(keyword => new CompletionItem(keyword, CompletionItemKind.Keyword)),
         ]);
