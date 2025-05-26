@@ -92,7 +92,9 @@ public class LspServer(Stream outputStream)
         CompletionListener completionListener = new(index);
         codeVisitor.Visit(result.Statements, completionListener);
 
-        if (completionListener.InFunctionParameterList || last?.Type is TokenType.VAR or TokenType.EACH or TokenType.FN || current?.Type is TokenType.STRING or TokenType.INTERPOLATED_STRING_MARKER || currentInclusive?.Type is TokenType.INTERPOLATED_TEXT || (currentInclusive?.Type is TokenType.INTERPOLATED_STRING_MARKER && index > currentInclusive.Start && currentInclusive.Lexeme is "@\"") || current?.Type == TokenType.COMMENT)
+        bool inString = current?.Type is TokenType.STRING or TokenType.INTERPOLATED_STRING_MARKER || currentInclusive?.Type is TokenType.INTERPOLATED_TEXT || (currentInclusive?.Type is TokenType.INTERPOLATED_STRING_MARKER && index > currentInclusive.Start && currentInclusive.Lexeme is "@\"");
+        bool inComment = current?.Type == TokenType.COMMENT || (currentInclusive?.Type is TokenType.COMMENT && index > currentInclusive.Start && !currentInclusive.Lexeme.StartsWith("##"));
+        if (completionListener.InFunctionParameterList || last?.Type is TokenType.VAR or TokenType.EACH or TokenType.FN || inString || inComment)
         {
             SendResponseTo(message, Array.Empty<object>());
             return;
