@@ -112,12 +112,16 @@ public class LspServer(Stream outputStream)
         string text = documents[message.Content.GetPath<string>("params", "textDocument", "uri")];
         MPSLCheckResult result = MPSL.Check(text);
 
+        var Error = (LspTypes.Range range, string message) => new { range, message, severity = DiagnosticSeverity.Error, source = "mpsl" };
+
+        (int Line, int Column, string Message)[] errors = result.TokenizerErrors.Select(e => (e.Line, e.Column, e.Message))
+            .Concat(result.ParserErrors.Select(e => (e.Token.Line, e.Token.Column, e.Message)))
+            .ToArray();
+
         SendResponseTo(message, new
         {
             kind = "full",
-            items = result.TokenizerErrors.Select(e => new { range = new LspTypes.Range(new(e.Line - 1, e.Column)), e.Message, severity = DiagnosticSeverity.Error, source = "mpsl" })
-                .Concat(result.ParserErrors.Select(e => new { range = new LspTypes.Range(new(e.Token.Line - 1, e.Token.Column)), e.Message, severity = DiagnosticSeverity.Error, source = "mpsl" }))
-                .ToArray()
+            items = errors.Select(e => Error(new(new(e.Line - 1, e.Column)), e.Message)).ToArray()
         });
     }
 
