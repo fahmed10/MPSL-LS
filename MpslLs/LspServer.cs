@@ -100,11 +100,11 @@ public class LspServer(Stream outputStream)
             return;
         }
 
-        SendResponseTo(message, (object[])[
+        SendResponseTo(message, ((object[])[
             ..completionListener.Items,
             ..builtInCompletions,
             ..keywords.Select(keyword => new CompletionItem(keyword, CompletionItemKind.Keyword)),
-        ]);
+        ]).Distinct());
     }
 
     void HandleDiagnostic(JsonRpcMessage message)
