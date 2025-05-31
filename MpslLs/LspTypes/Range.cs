@@ -5,7 +5,7 @@ namespace MpslLs.LspTypes;
 /// </summary>
 /// <param name="Start">The range's start position.</param>
 /// <param name="End">The range's end position.</param>
-record struct Range(Position Start, Position End)
+public record struct Range(Position Start, Position End)
 {
     public Range(Position position) : this(position, position) { }
 }
