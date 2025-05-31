@@ -4,24 +4,12 @@ public class JsonRpcReader(Stream inputStream)
 {
     readonly StreamReader reader = new(inputStream);
 
-    private char WaitRead()
-    {
-        while (true)
-        {
-            int i = reader.Read();
-            if (i >= 0)
-            {
-                return (char)i;
-            }
-        }
-    }
-
     public JsonRpcMessage? ReadMessage()
     {
         string input = "";
         while (!input.EndsWith("\r\n\r\n"))
         {
-            input += WaitRead();
+            input += reader.ReadLine() + "\r\n";
         }
 
         if (!JsonRpcMessage.TryParseHeader(input, out int contentLength))
@@ -30,13 +18,10 @@ public class JsonRpcReader(Stream inputStream)
             return null;
         }
 
-        input = "";
-        for (int i = 0; i < contentLength; i++)
-        {
-            input += WaitRead();
-        }
+        char[] buffer = new char[contentLength];
+        reader.ReadBlock(buffer, 0, contentLength);
 
-        if (!JsonRpcMessage.TryParseBody(input, out JsonRpcMessage? message))
+        if (!JsonRpcMessage.TryParseBody(new string(buffer), out JsonRpcMessage? message))
         {
             reader.ReadToEnd();
             return null;
