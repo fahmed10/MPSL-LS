@@ -4,41 +4,24 @@ using MpslLs.LspTypes;
 
 namespace MpslLs;
 
-public class CompletionListener(int index) : CodeVisitor.IListener
+public class CompletionListener(CodeVisitor visitor, int index) : CodeVisitor.IListener
 {
-    int useDepth = 0;
-    readonly int index = index;
     readonly List<CompletionItem> items = [];
     public ReadOnlyCollection<CompletionItem> Items => items.AsReadOnly();
     public bool InFunctionParameterList { get; private set; }
 
-    bool CodeVisitor.IListener.ShouldAccept(Statement statement)
+    bool CodeVisitor.IListener.ShouldAccept(INode node)
     {
-        if (useDepth > 0)
+        if (visitor.InUsedFile && node is not Expression.Block)
         {
             return true;
         }
 
-        if (index <= statement.Start)
+        if (node is Expression.Block block && (index < block.Start || index >= block.End))
         {
             return false;
         }
-        if (statement is Statement.Each each && (index < each.body.Start || index > each.body.End - 1))
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    bool CodeVisitor.IListener.ShouldAccept(Expression expression)
-    {
-        if (useDepth > 0)
-        {
-            return true;
-        }
-
-        if (expression is Expression.Block block && (index < block.Start || index > block.End - 1))
+        if (node is Statement.Each each && (index < each.body.Start || index >= each.body.End))
         {
             return false;
         }
@@ -72,15 +55,5 @@ public class CompletionListener(int index) : CodeVisitor.IListener
     void Statement.IVisitor.VisitEach(Statement.Each statement)
     {
         items.Add(new(statement.variableName.Lexeme, CompletionItemKind.Variable));
-    }
-
-    void Statement.IVisitor.VisitUse(Statement.Use useStatement)
-    {
-        useDepth++;
-    }
-
-    void CodeVisitor.IListener.UseStatementVisited()
-    {
-        useDepth--;
     }
 }

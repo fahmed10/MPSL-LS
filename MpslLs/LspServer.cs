@@ -25,6 +25,7 @@ public class LspServer(Stream outputStream)
 
             if (method == "initialize") HandleInitialize(message);
             else if (method == "textDocument/completion") HandleCompletion(message);
+            else if (method == "textDocument/hover") HandleHover(message);
             else if (method == "textDocument/diagnostic") HandleDiagnostic(message);
             else if (method == "textDocument/didOpen") HandleDocumentOpen(message);
             else if (method == "textDocument/didClose") HandleDocumentClose(message);
@@ -89,7 +90,7 @@ public class LspServer(Stream outputStream)
         Token? currentInclusive = result.Tokens.FirstOrDefault(t => index >= t.Start && index <= t.End);
         Token? last = result.Tokens.LastOrDefault(t => index > t.End);
 
-        CompletionListener completionListener = new(index);
+        CompletionListener completionListener = new(codeVisitor, index);
         codeVisitor.Visit(result.Statements, completionListener);
 
         bool inString = current?.Type is TokenType.STRING or TokenType.INTERPOLATED_STRING_MARKER || currentInclusive?.Type is TokenType.INTERPOLATED_TEXT || (currentInclusive?.Type is TokenType.INTERPOLATED_STRING_MARKER && index > currentInclusive.Start && currentInclusive.Lexeme is "@\"");
@@ -105,6 +106,28 @@ public class LspServer(Stream outputStream)
             ..builtInCompletions,
             ..keywords.Select(keyword => new CompletionItem(keyword, CompletionItemKind.Keyword)),
         ]).Distinct());
+    }
+
+    void HandleHover(JsonRpcMessage message)
+    {
+        string text = documents[message.Content.GetPath<string>("params", "textDocument", "uri")];
+        Position position = message.Content.ParsePathAs<Position>(jsonOptions, "params", "position");
+
+        MPSLCheckResult result = MPSL.Check(text);
+        int index = position.ToIndexIn(text);
+
+        Token? hoverToken = result.Tokens.FirstOrDefault(t => index >= t.Start && index <= t.End);
+
+        if (hoverToken == null)
+        {
+            SendResponseTo(message, (object?)null);
+            return;
+        }
+
+        HoverListener hoverListener = new(codeVisitor, hoverToken, new(Position.FromIndexIn(text, hoverToken.Start), Position.FromIndexIn(text, hoverToken.End)));
+        codeVisitor.Visit(result.Statements, hoverListener);
+
+        SendResponseTo(message, hoverListener.Hover);
     }
 
     void HandleDiagnostic(JsonRpcMessage message)

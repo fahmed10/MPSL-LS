@@ -5,11 +5,14 @@ namespace MpslLs;
 // TODO: Add all nodes of AST
 public class CodeVisitor : Statement.IVisitor, Expression.IVisitor
 {
+    int useDepth = 0;
+    public bool InUsedFile => useDepth > 0;
+
     public interface IListener : Statement.IVisitor, Expression.IVisitor
     {
-        bool ShouldAccept(Statement statement) => true;
-        bool ShouldAccept(Expression expression) => true;
+        bool ShouldAccept(INode node) => true;
         void UseStatementVisited() { }
+        void OnFileVisited() { }
     }
 
     IListener currentListener = null!;
@@ -22,6 +25,8 @@ public class CodeVisitor : Statement.IVisitor, Expression.IVisitor
         {
             AcceptIfShould(statement);
         }
+
+        currentListener.OnFileVisited();
     }
 
     void AcceptIfShould(Statement statement)
@@ -100,7 +105,9 @@ public class CodeVisitor : Statement.IVisitor, Expression.IVisitor
         catch { return; }
 
         MPSLCheckResult result = MPSL.Check(text);
+        useDepth++;
         Visit(result.Statements, currentListener);
+        useDepth--;
         currentListener.UseStatementVisited();
     }
 }
