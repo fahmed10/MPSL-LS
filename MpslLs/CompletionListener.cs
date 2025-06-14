@@ -21,7 +21,7 @@ public class CompletionListener(CodeVisitor visitor, int index) : CodeVisitor.IL
         {
             return false;
         }
-        if (node is Statement.Each each && (index < each.body.Start || index >= each.body.End))
+        if (node is Statement.Each each && (index < each.body.Start || (each.body.start.Type == TokenType.CURLY_LEFT && index >= each.body.End) || (index > each.body.End)))
         {
             return false;
         }
@@ -38,7 +38,7 @@ public class CompletionListener(CodeVisitor visitor, int index) : CodeVisitor.IL
     {
         items.Add(new(statement.name.Lexeme, CompletionItemKind.Function));
 
-        if (index >= statement.body.Start && index <= statement.body.End - 1)
+        if (index >= statement.body.Start && index <= statement.body.End - (statement.body.start.Type == TokenType.CURLY_LEFT ? 1 : 0))
         {
             foreach (Token parameter in statement.parameters)
             {
