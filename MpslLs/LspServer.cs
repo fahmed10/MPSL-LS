@@ -13,6 +13,7 @@ public class LspServer(Stream outputStream)
     static readonly JsonSerializerOptions jsonOptions = JsonSerializerOptions.Web;
     static readonly string[] triggerCharacters = ["@", ":"];
     static readonly CompletionItem[] builtInCompletions = GlobalFunctions.functions.Keys.Select(function => new CompletionItem("@" + function, CompletionItemKind.Function)).ToArray();
+    static readonly CompletionItem[] builtInGroupCompletions = BuiltInGroups.groups.Keys.Select(group => new CompletionItem(group, CompletionItemKind.Module)).ToArray();
     readonly StreamWriter writer = new(outputStream);
     readonly Dictionary<string, string> documents = [];
     readonly CodeVisitor codeVisitor = new();
@@ -92,26 +93,50 @@ public class LspServer(Stream outputStream)
         documents[uri] = newDocument.ToString();
     }
 
+    string UriToPath(string uri) => new Uri(uri).LocalPath.TrimStart('/');
+
     void HandleCompletion(JsonRpcMessage message)
     {
-        string text = documents[message.Content.GetPath<string>("params", "textDocument", "uri")];
+        string uri = message.Content.GetPath<string>("params", "textDocument", "uri");
+        string text = documents[uri];
         Position position = message.Content.ParsePathAs<Position>(jsonOptions, "params", "position");
 
         MPSLCheckResult result = MPSL.Check(text);
         int index = position.ToIndexIn(text);
+
+        if (message.Content["params"]!["context"]!["triggerCharacter"]?.GetValue<string>() == ":")
+        {
+            if (index < 2 || text[index - 2] != ':')
+            {
+                SendResponseTo(message, Array.Empty<object>());
+                return;
+            }
+        }
 
         Token? current = result.Tokens.FirstOrDefault(t => index > t.Start && index < t.End);
         Token? currentInclusive = result.Tokens.FirstOrDefault(t => index >= t.Start && index <= t.End);
         Token? last = result.Tokens.LastOrDefault(t => index > t.End);
 
         CompletionListener completionListener = new(codeVisitor, index);
-        codeVisitor.Visit(result.Statements, completionListener);
+        codeVisitor.Visit(UriToPath(uri), result.Statements, completionListener);
+
+        if (last?.Type is TokenType.USE && current?.Type != TokenType.STRING)
+        {
+            SendResponseTo(message, builtInGroupCompletions);
+            return;
+        }
 
         bool inString = current?.Type is TokenType.STRING or TokenType.INTERPOLATED_STRING_START or TokenType.INTERPOLATED_STRING_END || currentInclusive?.Type is TokenType.INTERPOLATED_TEXT || (currentInclusive?.Type is TokenType.INTERPOLATED_STRING_START && index > currentInclusive.Start) || (currentInclusive?.Type is TokenType.INTERPOLATED_STRING_END && index < currentInclusive.End);
         bool inComment = current?.Type == TokenType.COMMENT || (currentInclusive?.Type is TokenType.COMMENT && index > currentInclusive.Start && !currentInclusive.Lexeme.StartsWith("##"));
-        if (completionListener.InFunctionParameterList || last?.Type is TokenType.VAR or TokenType.EACH or TokenType.FN || inString || inComment)
+        if (completionListener.InFunctionParameterList || last?.Type is TokenType.VAR or TokenType.EACH or TokenType.FN or TokenType.GROUP || inString || inComment)
         {
             SendResponseTo(message, Array.Empty<object>());
+            return;
+        }
+
+        if (completionListener.InGroupAccess)
+        {
+            SendResponseTo(message, completionListener.Items);
             return;
         }
 
@@ -124,13 +149,14 @@ public class LspServer(Stream outputStream)
 
     void HandleHover(JsonRpcMessage message)
     {
-        string text = documents[message.Content.GetPath<string>("params", "textDocument", "uri")];
+        string uri = message.Content.GetPath<string>("params", "textDocument", "uri");
+        string text = documents[uri];
         Position position = message.Content.ParsePathAs<Position>(jsonOptions, "params", "position");
 
         MPSLCheckResult result = MPSL.Check(text);
         int index = position.ToIndexIn(text);
 
-        Token? hoverToken = result.Tokens.FirstOrDefault(t => index >= t.Start && index <= t.End);
+        Token? hoverToken = result.Tokens.FirstOrDefault(t => index >= t.Start && index < t.End);
 
         if (hoverToken == null)
         {
@@ -138,8 +164,9 @@ public class LspServer(Stream outputStream)
             return;
         }
 
-        HoverListener hoverListener = new(codeVisitor, hoverToken, new(Position.FromIndexIn(text, hoverToken.Start), Position.FromIndexIn(text, hoverToken.End)));
-        codeVisitor.Visit(result.Statements, hoverListener);
+        int prevTokenIndex = result.Tokens.IndexOf(hoverToken) - 1;
+        HoverListener hoverListener = new(codeVisitor, hoverToken, prevTokenIndex >= 0 ? result.Tokens[prevTokenIndex] : null, new(Position.FromIndexIn(text, hoverToken.Start), Position.FromIndexIn(text, hoverToken.End)));
+        codeVisitor.Visit(UriToPath(uri), result.Statements, hoverListener);
 
         SendResponseTo(message, hoverListener.Hover);
     }
