@@ -1,16 +1,18 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using MPSLInterpreter;
+using MPSLInterpreter.StdLibrary;
 using MpslLs.LspTypes;
 
 namespace MpslLs;
 
 public class LspServer(Stream outputStream)
 {
-    static readonly string[] keywords = ["true", "false", "if", "else", "while", "fn", "var", "break", "match", "each", "null", "use"];
+    static readonly string[] keywords = [.. MPSL.Keywords.Keys];
     static readonly JsonSerializerOptions jsonOptions = JsonSerializerOptions.Web;
-    static readonly string[] triggerCharacters = ["@"];
-    static readonly CompletionItem[] builtInCompletions = BuiltInFunctions.functions.Select(pair => new CompletionItem("@" + pair.Key, CompletionItemKind.Function)).ToArray();
+    static readonly string[] triggerCharacters = ["@", ":"];
+    static readonly CompletionItem[] builtInCompletions = GlobalFunctions.functions.Keys.Select(function => new CompletionItem("@" + function, CompletionItemKind.Function)).ToArray();
     readonly StreamWriter writer = new(outputStream);
     readonly Dictionary<string, string> documents = [];
     readonly CodeVisitor codeVisitor = new();
@@ -43,7 +45,7 @@ public class LspServer(Stream outputStream)
         {
             capabilities = new
             {
-                textDocumentSync = 1,
+                textDocumentSync = TextDocumentSyncKind.Incremental,
                 completionProvider = new { triggerCharacters },
                 diagnosticProvider = new
                 {
@@ -74,8 +76,20 @@ public class LspServer(Stream outputStream)
 
     void HandleDocumentChange(JsonRpcMessage message)
     {
-        JsonNode documentNode = message.Content["params"]!["textDocument"]!;
-        documents[documentNode.GetPath<string>("uri")] = message.Content["params"]!["contentChanges"]![0]!["text"]!.GetValue<string>().ReplaceLineEndings("\n");
+        string uri = message.Content.GetPath<string>("params", "textDocument", "uri");
+        string oldDocument = documents[uri];
+        StringBuilder newDocument = new(oldDocument);
+
+        var changeEvents = message.Content.ParsePathAs<TextDocumentContentChangeEventIncremental[]>(jsonOptions, "params", "contentChanges");
+        foreach (var changeEvent in changeEvents)
+        {
+            int start = changeEvent.Range.Start.ToIndexIn(newDocument.ToString());
+            int end = changeEvent.Range.End.ToIndexIn(newDocument.ToString());
+            newDocument.Remove(start, end - start);
+            newDocument.Insert(start, changeEvent.Text.ReplaceLineEndings("\n"));
+        }
+
+        documents[uri] = newDocument.ToString();
     }
 
     void HandleCompletion(JsonRpcMessage message)

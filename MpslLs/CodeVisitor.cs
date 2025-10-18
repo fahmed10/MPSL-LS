@@ -95,7 +95,7 @@ public class CodeVisitor : Statement.IVisitor, Expression.IVisitor
 
     void Statement.IVisitor.VisitUse(Statement.Use useStatement)
     {
-        string path = (string)useStatement.path.Value!;
+        string path = (string)useStatement.target.Value!;
         string text;
 
         try

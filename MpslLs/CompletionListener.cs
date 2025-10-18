@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using MPSLInterpreter;
+using MPSLInterpreter.StdLibrary;
 using MpslLs.LspTypes;
 
 namespace MpslLs;

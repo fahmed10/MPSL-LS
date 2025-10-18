@@ -1,4 +1,5 @@
 using MPSLInterpreter;
+using MPSLInterpreter.StdLibrary;
 using MpslLs.LspTypes;
 
 namespace MpslLs;
@@ -6,6 +7,7 @@ namespace MpslLs;
 public class HoverListener(CodeVisitor visitor, Token token, LspTypes.Range tokenRange) : CodeVisitor.IListener
 {
     public Hover? Hover { get; private set; } = null;
+    bool InUsedFile => visitor.InUsedFile;
 
     bool CodeVisitor.IListener.ShouldAccept(INode node)
     {
@@ -62,7 +64,7 @@ public class HoverListener(CodeVisitor visitor, Token token, LspTypes.Range toke
 
     void CodeVisitor.IListener.OnFileVisited()
     {
-        if (!visitor.InUsedFile && Hover == null && BuiltInFunctions.functions.TryGetValue(token.Lexeme.Length > 0 ? token.Lexeme[1..] : token.Lexeme, out NativeFunction? nativeFunction))
+        if (!InUsedFile && Hover == null && GlobalFunctions.functions.TryGetValue(token.Lexeme.Length > 0 ? token.Lexeme[1..] : token.Lexeme, out NativeFunction? nativeFunction))
         {
             Hover = CreateHover($"{token.Lexeme} {string.Join(", ", nativeFunction.Function.Method.GetParameters().Select(p => p.Name))}");
         }
